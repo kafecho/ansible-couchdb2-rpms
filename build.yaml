@@ -1,0 +1,4 @@
+---
+- hosts: all
+  roles:
+  - build-couchdb2-rpms

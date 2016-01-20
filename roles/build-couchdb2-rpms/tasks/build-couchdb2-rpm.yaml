@@ -1,0 +1,101 @@
+---
+- name: ensure CouchDB is not running
+  service: name=couchdb state=stopped
+  ignore_errors: yes
+
+- name: download Erlang 18
+  get_url: url=https://packages.erlang-solutions.com/erlang/esl-erlang/FLAVOUR_1_general/esl-erlang_18.2-1~centos~6_amd64.rpm dest=/opt/ force=no
+
+- name: install Erlang 18
+  yum: name=/opt/esl-erlang_18.2-1~centos~6_amd64.rpm
+
+- name: Install libicu-devel
+  yum: name=libicu-devel state=installed
+
+- name: install xz
+  yum: name=xz
+
+- name: download the node.js distribution
+  get_url: force=no url=https://nodejs.org/dist/v4.2.4/node-v4.2.4-linux-x64.tar.xz dest=/opt
+  tags: download_node
+
+- name: untar the node.js distribution
+  shell: tar xf node-v4.2.4-linux-x64.tar.xz chdir=/opt
+  tags: install_node
+
+- name: create the symlinks for the node tools
+  file: path=/usr/bin/{{ item }} src=/opt/node-v4.2.4-linux-x64/bin/{{ item }} state=link
+  with_items:
+  - node
+  - npm
+  tags: link_node
+
+- name: enable the EPEL release repository
+  yum: name=epel-release
+
+- name: ensure Python pip is installed
+  yum: name=python-pip
+
+- name: ensure sphinx is installed
+  shell: pip install sphinx
+
+- name: ensure Tex is installed
+  yum: name='@Tex Support'
+
+- name: ensure texinfo is installed
+  yum: name=texinfo
+
+- name: ensure git is installed
+  yum: name=git
+
+- name: checkout the rebar sources from git
+  git: repo=https://github.com/rebar/rebar.git dest=rebar force=yes
+  
+- name: compile rebar
+  shell: ./bootstrap chdir=rebar
+
+- name: copy the rebar tool to /usr/bin
+  shell: cp rebar/rebar /usr/bin/rebar
+
+- name: checkout the CouchDB sources from the git repo
+  git: repo=https://github.com/apache/couchdb dest=/tmp/couchdb force=yes
+  tags: "checkout_couchdb"
+
+- name: install SpiderMonkey from the RPM file (this is required in order to compile CouchDB)
+  yum: name={{ RPMS_DIRECTORY }}/js-1.85-1.x86_64.rpm
+
+- name: add the symbolic link /usr/include/js pointing to /usr/local/include/js (otherwise CouchDB complains about not being able to find jsapi.h)
+  file: path=/usr/include/js src=/usr/local/include/js state=link
+
+- name: execute configure
+  shell: ./configure --disable-docs chdir=/tmp/couchdb
+  tags: "configure_couchdb"
+  async: 1800
+
+- name: ensure epmd is not running
+  shell: pkill epmd
+  ignore_errors: yes
+
+- name: execute make
+  shell: make chdir=/tmp/couchdb
+  tags: "make_couchdb"
+  async: 1800
+
+- name: execute make install
+  shell: make DESTDIR=/tmp/couchdb/fpm --silent install chdir=/tmp/couchdb
+
+- name: package Apache CouchDB 2 as an rpm with fpm
+  shell: fpm -s dir -t rpm -n couchdb -v 2.0.0 -f -p {{ RPMS_DIRECTORY }} -C /tmp/couchdb/fpm usr
+
+- name: install Apache2 to serve the RPMs via HTTP
+  yum: name=httpd
+
+- name: add a symlink to Apache
+  file: path=/var/www/html/rpms src="{{ RPMS_DIRECTORY }}" state=link
+
+- name: ensure Apache is running (and enabled at boot time)
+  service: name=httpd state=started enabled=yes
+
+- name: turn the firewall off (because I am lazy)
+  service: name=iptables state=stopped enabled=no
+

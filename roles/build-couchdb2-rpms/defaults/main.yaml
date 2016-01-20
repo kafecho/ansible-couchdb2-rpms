@@ -1,0 +1,3 @@
+---
+#Location on the file system where the RPMS will be saved
+RPMS_DIRECTORY: /usr/src/ansible/RPMS

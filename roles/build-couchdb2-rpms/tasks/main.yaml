@@ -1,0 +1,16 @@
+---
+- name: create the directory to store the RPMs
+  file: path={{ RPMS_DIRECTORY }} state=directory 
+
+- name: install build tools
+  yum: name={{ item }}
+  with_items:
+  - zip
+  - unzip
+  - rpm-build
+
+- name: install fpm
+  shell: gem install fpm
+
+- include: build-spidermonkey-rpm.yaml
+- include: build-couchdb2-rpm.yaml
